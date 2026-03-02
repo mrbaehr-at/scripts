@@ -23,6 +23,7 @@ Usage:
 """
 
 import csv
+import json
 import os
 import sys
 import time
@@ -64,15 +65,27 @@ DEFAULT_BACKOFF = 30  # seconds, used when Retry-After header is missing
 # Airtable API base URL
 AIRTABLE_API_URL = "https://api.airtable.com/v0"
 
+# Progress file for resume support
+PROGRESS_FILE = "progress.json"
+
+# Log file
+LOG_FILE = "upsert.log"
+
 # ---------------------------------------------------------------------------
-# Logging
+# Logging (configured in setup_logging(), called at start of main)
 # ---------------------------------------------------------------------------
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
-)
 log = logging.getLogger(__name__)
+
+
+def setup_logging():
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        handlers=[
+            logging.StreamHandler(sys.stdout),
+            logging.FileHandler(LOG_FILE),
+        ],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -117,7 +130,8 @@ def airtable_upsert(session, base_id, table_name, records, key_fields,
             time.sleep(retry_after)
             continue
 
-        # Any other error — raise immediately
+        # Any other error — log details and raise
+        log.error("API error %d: %s", resp.status_code, resp.text)
         resp.raise_for_status()
 
     raise RuntimeError(
@@ -214,6 +228,23 @@ def csv_chunks(filepath: str, col_to_field_id: dict[str, str], chunk_size: int):
             yield chunk
 
 
+def load_progress() -> dict:
+    if Path(PROGRESS_FILE).exists():
+        with open(PROGRESS_FILE, "r") as f:
+            return json.load(f)
+    return {"last_chunk": 0, "total_created": 0, "total_updated": 0, "total_records": 0}
+
+
+def save_progress(chunk_num: int, total_created: int, total_updated: int, total_records: int):
+    with open(PROGRESS_FILE, "w") as f:
+        json.dump({
+            "last_chunk": chunk_num,
+            "total_created": total_created,
+            "total_updated": total_updated,
+            "total_records": total_records,
+        }, f)
+
+
 def validate_key_fields(col_to_field_id: dict[str, str]) -> None:
     """
     Confirm every KEY_FIELD_ID appears as a value in the mapping,
@@ -233,6 +264,8 @@ def validate_key_fields(col_to_field_id: dict[str, str]) -> None:
 # ---------------------------------------------------------------------------
 
 def main():
+    setup_logging()
+
     # Validate file paths up front
     for path, label in [(CSV_FILE_PATH, "Records CSV"), (MAPPING_CSV_PATH, "Mapping CSV")]:
         if not Path(path).exists():
@@ -257,13 +290,24 @@ def main():
     log.info("Connected → base: %s  table: %s", BASE_ID, TABLE_NAME)
     log.info("Upsert key field ID(s): %s", KEY_FIELD_IDS)
 
-    total_created = 0
-    total_updated = 0
-    total_records = 0
-    chunk_num     = 0
+    progress = load_progress()
+    start_after = progress["last_chunk"]
+    total_created = progress["total_created"]
+    total_updated = progress["total_updated"]
+    total_records = progress["total_records"]
+
+    if start_after > 0:
+        log.info("Resuming from chunk %d (%d records already processed)",
+                 start_after + 1, total_records)
+
+    chunk_num = 0
 
     for chunk in csv_chunks(CSV_FILE_PATH, col_to_field_id, CHUNK_SIZE):
         chunk_num += 1
+
+        if chunk_num <= start_after:
+            continue
+
         log.info("Chunk %d — sending %d records...", chunk_num, len(chunk))
 
         result = airtable_upsert(
@@ -282,7 +326,12 @@ def main():
         total_updated += updated
         total_records += len(chunk)
 
+        save_progress(chunk_num, total_created, total_updated, total_records)
         log.info("  created: %d  updated: %d", created, updated)
+
+    # Clean up progress file on successful completion
+    if Path(PROGRESS_FILE).exists():
+        os.remove(PROGRESS_FILE)
 
     log.info("=" * 55)
     log.info("Done!")

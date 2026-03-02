@@ -1,0 +1,12 @@
+# Customer-specific data files — never commit
+walmart/data.csv
+walmart/data_test.csv
+walmart/mapping.csv
+walmart/mapping_test.csv
+walmart/progress.json
+walmart/progress_test.json
+walmart/*.log
+walmart/test_upsert.py
+
+__pycache__/
+.DS_Store
