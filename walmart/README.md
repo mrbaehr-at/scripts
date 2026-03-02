@@ -98,7 +98,7 @@ export AIRTABLE_KEY_FIELD_IDS=fldf7Xvt6tDmcgfLW
 
 ### 5. Run
 
-```
+```bash
 export AIRTABLE_API_KEY=patXXXXXX
 export AIRTABLE_BASE_ID=appXXXXXX
 export AIRTABLE_TABLE_NAME=Epics
@@ -107,7 +107,28 @@ export AIRTABLE_KEY_FIELD_IDS=fldXXXXXX
 python csv_to_airtable_upsert.py
 ```
 
-Output goes to both stdout and `upsert.log`. If the script is interrupted, just re-run it — it will resume from where it left off.
+Output goes to both stdout and `upsert.log`.
+
+### If the script dies or you need to stop it
+
+**Just re-run the same command.** The script saves its progress to `progress.json` after every successful batch. On restart, it reads that file and skips ahead to the next unprocessed batch. You'll see a log line like:
+
+```
+Resuming from chunk 3583 (35820 records already processed)
+```
+
+Since this is an upsert (not insert), re-processing a few records from the last batch is harmless — they'll match on the merge key and update in place.
+
+To **force a full re-run from scratch**, delete the progress file first:
+```bash
+rm progress.json
+python csv_to_airtable_upsert.py
+```
+
+To **monitor a running job** from another terminal:
+```bash
+tail -f upsert.log
+```
 
 ### Configuration options
 

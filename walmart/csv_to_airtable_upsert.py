@@ -117,7 +117,15 @@ def airtable_upsert(session, base_id, table_name, records, key_fields,
     }
 
     for attempt in range(1, MAX_RETRIES + 1):
-        resp = session.request(method, url, json=payload)
+        try:
+            resp = session.request(method, url, json=payload, timeout=60)
+        except requests.exceptions.Timeout:
+            log.warning(
+                "Request timed out (attempt %d/%d). Retrying in %ds...",
+                attempt, MAX_RETRIES, DEFAULT_BACKOFF,
+            )
+            time.sleep(DEFAULT_BACKOFF)
+            continue
 
         if resp.status_code == 200:
             return resp.json()
