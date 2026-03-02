@@ -34,9 +34,9 @@ import requests
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-AIRTABLE_API_KEY = os.getenv("AIRTABLE_API_KEY", "INSERT PAT")
-BASE_ID          = os.getenv("AIRTABLE_BASE_ID", "applQjpWCBTZSHOHo")
-TABLE_NAME       = os.getenv("AIRTABLE_TABLE_NAME", "Epics")
+AIRTABLE_API_KEY = os.getenv("AIRTABLE_API_KEY", "")
+BASE_ID          = os.getenv("AIRTABLE_BASE_ID", "")
+TABLE_NAME       = os.getenv("AIRTABLE_TABLE_NAME", "")
 
 # Path to the large CSV you want to import
 CSV_FILE_PATH    = "data.csv"
@@ -48,10 +48,11 @@ MAPPING_CSV_PATH = "mapping.csv"
 MAPPING_CSV_COLUMN      = "CSV Column"              # column containing the source CSV header name
 MAPPING_FIELD_ID_COLUMN = "Epics Table Field ID"    # column containing the Airtable field ID
 
-# The Airtable field ID(s) to use as the upsert match key.
-# Must be field IDs (fldXXXXXX), not field names.
-# e.g. KEY_FIELD_IDS = ["fldK13cQuyfThB4s4"]  ← IssueKey
-KEY_FIELD_IDS = ["fldK13cQuyfThB4s4"]
+# The Airtable field ID(s) to use as the upsert merge key.
+# This is the unique identifier from the SOURCE data (e.g. a Jira IssueKey),
+# NOT the Airtable record ID. Must be field IDs (fldXXXXXX), not field names.
+# Find the field ID in Airtable: click field header → "Edit field" → URL contains the ID.
+KEY_FIELD_IDS = os.getenv("AIRTABLE_KEY_FIELD_IDS", "").split(",") if os.getenv("AIRTABLE_KEY_FIELD_IDS") else []
 
 # Optional settings
 TYPECAST   = True   # Coerce string values to correct field types (dates, checkboxes, etc.)
@@ -269,6 +270,20 @@ def validate_key_fields(col_to_field_id: dict[str, str]) -> None:
 
 def main():
     setup_logging()
+
+    # Validate required configuration
+    missing = []
+    if not AIRTABLE_API_KEY:
+        missing.append("AIRTABLE_API_KEY")
+    if not BASE_ID:
+        missing.append("AIRTABLE_BASE_ID")
+    if not TABLE_NAME:
+        missing.append("AIRTABLE_TABLE_NAME")
+    if not KEY_FIELD_IDS or KEY_FIELD_IDS == [""]:
+        missing.append("AIRTABLE_KEY_FIELD_IDS")
+    if missing:
+        log.error("Missing required env var(s): %s", ", ".join(missing))
+        sys.exit(1)
 
     # Validate file paths up front
     for path, label in [(CSV_FILE_PATH, "Records CSV"), (MAPPING_CSV_PATH, "Mapping CSV")]:
