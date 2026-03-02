@@ -27,6 +27,18 @@ We extracted and inlined that logic into a standalone `airtable_upsert()` functi
 - Key field validation
 - All config variables and logging
 
+## Duplicate handling
+
+If the CSV contains multiple rows with the same upsert key (e.g. `IssueKey`), the **last row wins** — within each batch, later rows overwrite earlier ones with the same key. This prevents the Airtable API from rejecting a batch that contains the same record twice.
+
+## Resume support
+
+Progress is saved to `progress.json` after each successful batch. If the script crashes or is interrupted, re-running it will resume from the last successful batch. On successful completion, the progress file is automatically deleted.
+
+## Logging
+
+All output is written to both stdout and `upsert.log` (configurable via `LOG_FILE`). API error response bodies are logged before the script exits, so you can diagnose failures from the log file alone.
+
 ## Dependencies
 
 ```

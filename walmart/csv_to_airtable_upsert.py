@@ -214,18 +214,22 @@ def csv_chunks(filepath: str, col_to_field_id: dict[str, str], chunk_size: int):
                 len(unmapped), unmapped,
             )
 
-        chunk = []
+        chunk = {}  # keyed by merge key value to deduplicate within a chunk
         for row in reader:
             fields = apply_mapping(row, col_to_field_id)
-            if fields:  # skip entirely empty rows
-                chunk.append({"fields": fields})
+            if not fields:
+                continue
+
+            # Deduplicate by merge key within the chunk
+            merge_vals = tuple(fields.get(k, "") for k in KEY_FIELD_IDS)
+            chunk[merge_vals] = {"fields": fields}
 
             if len(chunk) == chunk_size:
-                yield chunk
-                chunk = []
+                yield list(chunk.values())
+                chunk = {}
 
         if chunk:
-            yield chunk
+            yield list(chunk.values())
 
 
 def load_progress() -> dict:
