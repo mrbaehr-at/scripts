@@ -57,7 +57,7 @@ KEY_FIELD_IDS = os.getenv("AIRTABLE_KEY_FIELD_IDS", "").split(",") if os.getenv(
 # Optional settings
 TYPECAST   = True   # Coerce string values to correct field types (dates, checkboxes, etc.)
 REPLACE    = False  # False = patch only; True = overwrite entire record (nulls unmapped fields)
-CHUNK_SIZE = 5  # Rows per API request — max 10 per Airtable API limit
+CHUNK_SIZE = 10  # Rows per API request — max 10 per Airtable API limit
 
 # Retry settings for rate limiting (HTTP 429)
 MAX_RETRIES     = 5
@@ -210,7 +210,9 @@ def csv_chunks(filepath: str, col_to_field_id: dict[str, str], chunk_size: int):
         chunk_size = 10
 
     with open(filepath, newline="", encoding="utf-8-sig") as f:
-        reader = csv.DictReader(f)
+        # Strip NUL bytes that some CSV exports contain
+        clean = (line.replace("\x00", "") for line in f)
+        reader = csv.DictReader(clean)
 
         if reader.fieldnames is None:
             raise ValueError("Records CSV appears to be empty or has no header row.")
